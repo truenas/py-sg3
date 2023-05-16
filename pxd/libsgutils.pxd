@@ -1,4 +1,4 @@
-from libc.stdint cimport uint8_t, uint16_t, uint32_t
+from libc.stdint cimport uint8_t, uint16_t, uint32_t, uint64_t
 
 cdef struct type_desc_hdr_t:
     uint8_t etype
@@ -104,9 +104,15 @@ cdef extern from "scsi/sg_pt.h" nogil:
 cdef extern from "scsi/sg_lib.h" nogil:
 
     unsigned char * sg_memalign(unsigned int, unsigned int, unsigned char **, bint)
+    uint64_t sg_get_big_endian(const uint8_t *, int, int)
+    void sg_set_big_endian(uint64_t, uint8_t *, int, int)
     char *sg_get_pdt_str(int, int, char *)
 
 cdef extern from "scsi/sg_unaligned.h" nogil:
 
     uint16_t sg_get_unaligned_be16(const void *)
     uint32_t sg_get_unaligned_be32(const void *)
+
+cdef extern from "scsi/sg_cmds_extra.h" nogil:
+
+    int sg_ll_send_diag_pt(sg_pt_base *, int, bint, bint, bint, bint, int, void *, int, bint, int)
