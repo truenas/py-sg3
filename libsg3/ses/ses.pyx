@@ -3,7 +3,7 @@
 from pxd cimport libsgutils
 
 from libc.string cimport memset, memcpy, memcmp, strlen
-from libc.stdlib cimport free
+from libc.stdlib cimport malloc, free
 from libc.stdio cimport snprintf
 from libc.errno cimport errno
 from libc.stdint cimport uint8_t, uint32_t, uint64_t
@@ -868,6 +868,172 @@ cdef class EnclosureDevice(object):
             self.clear_objs()
             with gil:
                 return bytes(self.r_buff, encoding='ascii').decode()
+
+    def status(self):
+        cdef int len = -1
+        cdef int num_ths, desc_len, el, num_dsc, ind, j
+        cdef uint32_t ref_gen
+        cdef uint8_t * bp
+        cdef uint8_t * last_bp
+        cdef uint8_t * tc_buff
+        cdef char id_buff[18]
+        cdef char name_buff[30]
+        cdef char ** stat_buff
+        cdef char ** desc_buff
+        cdef libsgutils.enclosure_info info
+        cdef libsgutils.type_desc_hdr_t * tp
+        cdef bint invop, infob, noncrit, crit, unrecov
+        cdef char * front = id_buff
+        cdef char * back = id_buff + sizeof(id_buff)
+
+        enclosure = {
+            "id": "",
+            "name": "",
+            "status": set(),
+            "elements": {},
+        }
+
+        with nogil:
+            if self.alloc_resp_buffs() != 0:
+                self.clear_objs()
+                raise OSError(-12, "Out of memory.")
+            self.clear_r_buff()
+            if self.sg_inquiry() != 0:
+                self.clear_objs()
+                raise OSError(-1, bytes(self.r_buff, encoding='ascii').decode())
+            if self.get_diagnostic_page(self.CONFIGURATION_DPC, self.rsp_buff, &len) != 0:
+                raise OSError(-1, bytes(self.r_buff, encoding='ascii').decode())
+            if len < 4:
+                self.clear_objs()
+                raise OSError(-1, "SES Confgiruation: Response too short.")
+            last_bp = self.rsp_buff + len - 1
+            bp = self.rsp_buff + 8
+            if bp + 3 > last_bp:
+                self.clear_objs()
+                raise OSError(-1, "SES Confgiruation: Response too short.")
+            el = bp[3] + 4
+            if el < 40:
+                bp += el
+            memset(id_buff, 0, sizeof(id_buff))
+            for j in range(8):
+                front += snprintf(front, back - front, "%02x", bp[4 + j])
+            memset(name_buff, 0, sizeof(name_buff))
+            snprintf(name_buff, sizeof(name_buff), "%.8s%.16s%.4s", bp + 12, bp + 20, bp + 36)
+
+            self.clear_ptvp()
+            self.clear_r_buff()
+            num_ths = self.build_tdhs(&ref_gen, &info)
+            if num_ths < 0:
+                self.clear_objs()
+                raise OSError(-1, bytes(self.r_buff, encoding='ascii').decode())
+            num_dsc = 0
+            for i in range(num_ths):
+                num_dsc += (1 + self.desc_hdrs[i].num_elements)
+            tc_buff = <uint8_t *> malloc(num_dsc * sizeof(uint8_t))
+
+            self.clear_ptvp()
+            self.clear_r_buff()
+            if self.get_diagnostic_page(self.ENC_STATUS_DPC, self.rsp_buff, &len) != 0:
+                raise OSError(-1, bytes(self.r_buff, encoding='ascii').decode())
+            if len < 4:
+                self.clear_objs()
+                raise OSError(-1, "Enclosure Status: response too short.")
+            invop = (self.rsp_buff[1] & 0x10) != 0
+            infob = (self.rsp_buff[1] & 0x8) != 0
+            noncrit = (self.rsp_buff[1] & 0x4) != 0
+            crit = (self.rsp_buff[1] & 0x2) != 0
+            unrecov = (self.rsp_buff[1] & 0x1) != 0
+            bp = self.rsp_buff + 8
+            tp = self.desc_hdrs
+            last_bp = self.rsp_buff + len - 1
+            ind = 0
+            stat_buff = <char**> malloc(num_dsc * sizeof(char *))
+            for k in range(0, num_ths):
+                if bp + 3 > last_bp:
+                    self.clear_objs()
+                    raise OSError(-1, "Enclosure Status: response too short.")
+                stat_buff[ind] = <char *> malloc(12 * sizeof(char))
+                snprintf(stat_buff[ind], 12, "%02x %02x %02x %02x", bp[0], bp[1], bp[2], bp[3])
+                ind += 1
+                bp += 4
+                for j in range (0, tp.num_elements):
+                    stat_buff[ind] = <char *> malloc(12 * sizeof(char))
+                    snprintf(stat_buff[ind], 12, "%02x %02x %02x %02x", bp[0], bp[1], bp[2], bp[3])
+                    ind += 1
+                    bp += 4
+                tp += 1
+
+            self.clear_ptvp()
+            self.clear_r_buff()
+            if self.get_diagnostic_page(self.ELEM_DESC_DPC, self.rsp_buff, &len) != 0:
+                raise OSError(-1, bytes(self.r_buff, encoding='ascii').decode())
+            if len < 8:
+                self.clear_objs()
+                raise OSError(-1, "Element Descriptor: response too short.")
+            bp = self.rsp_buff + 8
+            tp = self.desc_hdrs
+            last_bp = self.rsp_buff + len - 1
+            ind = 0
+            desc_buff = <char**> malloc(num_dsc * sizeof(char *))
+            for k in range(0, num_ths):
+                if bp + 3 > last_bp:
+                    self.clear_objs()
+                    raise OSError(-1, "Element Descriptor: response too short.")
+                desc_len = libsgutils.sg_get_unaligned_be16(bp + 2) + 4
+                if desc_len > 4:
+                    desc_buff[ind] = <char *> malloc((desc_len - 3) * sizeof(char))
+                    snprintf(desc_buff[ind], desc_len - 3, "%.*s", desc_len - 4, bp + 4)
+                else:
+                    desc_buff[ind] = <char *> malloc(8 * sizeof(char))
+                    snprintf(desc_buff[ind], 8, "<empty>")
+                tc_buff[ind] = tp.etype
+                ind += 1
+                bp += desc_len
+                for j in range (0, tp.num_elements):
+                    desc_len = libsgutils.sg_get_unaligned_be16(bp + 2) + 4
+                    if desc_len > 4:
+                        desc_buff[ind] = <char *> malloc((desc_len - 3) * sizeof(char))
+                        snprintf(desc_buff[ind], desc_len - 3, "%.*s", desc_len - 4, bp + 4)
+                    else:
+                        desc_buff[ind] = <char *> malloc(8 * sizeof(char))
+                        snprintf(desc_buff[ind], 8, "<empty>")
+                    tc_buff[ind] = tp.etype
+                    ind += 1
+                    bp += desc_len
+                tp += 1
+
+            with gil:
+                enclosure["id"] = bytes(id_buff, encoding='ascii').decode()
+                enclosure["name"] = " ".join(bytes(name_buff, encoding='ascii').decode().split())
+                if not invop and not infob and not noncrit and not crit and not unrecov:
+                    enclosure["status"].add("OK")
+                else:
+                    if invop:
+                        enclosure["status"].add("INVOP")
+                    if infob:
+                        enclosure["status"].add("INFO")
+                    if noncrit:
+                        enclosure["status"].add("NON-CRIT")
+                    if crit:
+                        enclosure["status"].add("CRIT")
+                    if unrecov:
+                        enclosure["status"].add("UNRECOV")
+                elements = {}
+                for i in range(num_dsc):
+                    type = tc_buff[i]
+                    dsc = bytes(desc_buff[i], encoding='ascii').decode()
+                    stts = [int(x, 16) for x in bytes(stat_buff[i], encoding='ascii').decode().split()]
+                    elements[i] = { "type": type, "descriptor": dsc, "status": stts }
+                enclosure["elements"] = elements
+            self.clear_objs()
+            for i in range(num_dsc):
+                free(stat_buff[i])
+                free(desc_buff[i])
+            free(stat_buff)
+            free(desc_buff)
+            free(tc_buff)
+
+        return enclosure
 
     def set_control(self, index, command):
         cdef int len = -1, match = -1
