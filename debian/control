@@ -1,4 +1,4 @@
-Source: python3-sg3
+Source: py-sg3
 Maintainer: Umer Saleem <usaleem@ixsystems.com>
 Section: python
 Priority: optional
@@ -12,5 +12,5 @@ Standards-Version: 4.3.0
 
 Package: python3-sg3
 Architecture: all
-Depends: libsgutils2-1.46-2, ${misc:Depends}, ${python3:Depends}
+Depends: libsgutils2-dev, ${misc:Depends}, ${python3:Depends}
 Description: Python bindings for libsgutils2-dev package (sg3_utils)
