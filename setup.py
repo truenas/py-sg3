@@ -9,7 +9,7 @@ Exts = [
 ]
 
 setup(
-    name="py-sg3",
+    name="python3-sg3",
     version="0.1.0",
     license="BSD-3-Clause",
     setup_requires=[
