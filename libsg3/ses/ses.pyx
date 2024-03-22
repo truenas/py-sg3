@@ -329,6 +329,12 @@ cdef class EnclosureDevice(object):
         }
         return element_dict[index]
 
+    def decode_response(self, buff):
+        try:
+            return bytes(buff, encoding='ascii').decode()
+        except Exception:
+            return ""
+
     cdef int get_diagnostic_page(self, int page_code, unsigned char * buff, int * rsp_len) nogil:
         cdef int ret = -1
         cdef int resid
@@ -501,11 +507,11 @@ cdef class EnclosureDevice(object):
             self.clear_r_buff()
             if self.sg_inquiry() != 0:
                 self.clear_objs()
-                raise OSError(-1, bytes(self.r_buff, encoding='ascii').decode())
+                raise OSError(-1, self.decode_response(self.r_buff))
             num_ths = self.build_tdhs(&ref_gen, &info)
             if num_ths < 0:
                 self.clear_objs()
-                raise OSError(-1, bytes(self.r_buff, encoding='ascii').decode())
+                raise OSError(-1, self.decode_response(self.r_buff))
             if 1 == self.desc_hdrs_count and info.have_info:
                 self.start += snprintf(self.start, self.end - self.start, "  Primary enclosure logical identifier (hex): ")
                 if self.start >= self.end:
@@ -523,7 +529,7 @@ cdef class EnclosureDevice(object):
 
             self.clear_ptvp()
             if self.get_diagnostic_page(self.ELEM_DESC_DPC, self.rsp_buff, &len) != 0:
-                raise OSError(-1, bytes(self.r_buff, encoding='ascii').decode())
+                raise OSError(-1, self.decode_response(self.r_buff))
             self.start += snprintf(self.start, self.end - self.start, "Element Descriptor diagnostic page:\n")
             if self.start >= self.end:
                 self.clear_objs()
@@ -534,7 +540,7 @@ cdef class EnclosureDevice(object):
                     self.clear_objs()
                     raise OSError(-1, "Return buffer is full.")
                 self.clear_objs()
-                raise OSError(-1, bytes(self.r_buff, encoding='ascii').decode())
+                raise OSError(-1, self.decode_response(self.r_buff))
 
             last_bp = self.rsp_buff + len - 1
             gen = libsgutils.sg_get_unaligned_be32(self.rsp_buff + 4)
@@ -548,7 +554,7 @@ cdef class EnclosureDevice(object):
                     self.clear_objs()
                     raise OSError(-1, "Return buffer is full.")
                 self.clear_objs()
-                raise OSError(-1, bytes(self.r_buff, encoding='ascii').decode())
+                raise OSError(-1, self.decode_response(self.r_buff))
 
             self.start += snprintf(self.start, self.end - self.start, "  element descriptor list (grouped by type):\n")
             if self.start >= self.end:
@@ -563,7 +569,7 @@ cdef class EnclosureDevice(object):
                         self.clear_objs()
                         raise OSError(-1, "Return buffer is full.")
                     self.clear_objs()
-                    raise OSError(-1, bytes(self.r_buff, encoding='ascii').decode())
+                    raise OSError(-1, self.decode_response(self.r_buff))
                 desc_len = libsgutils.sg_get_unaligned_be16(bp + 2) + 4
                 memset(el_buff, 0, sizeof(el_buff))
                 self.start += snprintf(self.start, self.end - self.start, "    Element type: %s, subenclosure id: %d [ti=%d]\n", self.etype_str(tp.etype, el_buff, sizeof(el_buff)), tp.se_id, k)
@@ -597,7 +603,7 @@ cdef class EnclosureDevice(object):
                 tp += 1
             self.clear_objs()
             with gil:
-                return bytes(self.r_buff, encoding='ascii').decode()
+                return self.decode_response(self.r_buff)
 
     def get_configuration(self):
         cdef int len = -1, el = 0
@@ -617,10 +623,10 @@ cdef class EnclosureDevice(object):
             self.clear_r_buff()
             if self.sg_inquiry() != 0:
                 self.clear_objs()
-                raise OSError(-1, bytes(self.r_buff, encoding='ascii').decode())
+                raise OSError(-1, self.decode_response(self.r_buff))
 
             if self.get_diagnostic_page(self.CONFIGURATION_DPC, self.rsp_buff, &len) != 0:
-                raise OSError(-1, bytes(self.r_buff, encoding='ascii').decode())
+                raise OSError(-1, self.decode_response(self.r_buff))
             self.start += snprintf(self.start, self.end - self.start, "Configuration diagnostic page:\n")
             if self.start >= self.end:
                 self.clear_objs()
@@ -631,7 +637,7 @@ cdef class EnclosureDevice(object):
                     self.clear_objs()
                     raise OSError(-1, "Return buffer is full.")
                 self.clear_objs()
-                raise OSError(-1, bytes(self.r_buff, encoding='ascii').decode())
+                raise OSError(-1, self.decode_response(self.r_buff))
 
             num_subs = self.rsp_buff[1] + 1
             self.start += snprintf(self.start, self.end - self.start, "  number of secondary subenclosures: %d\n", num_subs - 1)
@@ -657,7 +663,7 @@ cdef class EnclosureDevice(object):
                         self.clear_objs()
                         raise OSError(-1, "Return buffer is full.")
                     self.clear_objs()
-                    raise OSError(-1, bytes(self.r_buff, encoding='ascii').decode())
+                    raise OSError(-1, self.decode_response(self.r_buff))
                 el = bp[3] + 4
                 el_types += bp[2]
                 if bp[1] != 0:
@@ -712,7 +718,7 @@ cdef class EnclosureDevice(object):
                         self.clear_objs()
                         raise OSError(-1, "Return buffer is full.")
                     self.clear_objs()
-                    raise OSError(-1, bytes(self.r_buff, encoding='ascii').decode())
+                    raise OSError(-1, self.decode_response(self.r_buff))
                 memset(el_buff, 0, sizeof(el_buff))
                 self.start += snprintf(self.start, self.end - self.start, "    Element type: %s, subenclosure id: %d\n", self.etype_str(bp[0], el_buff, sizeof(el_buff)), bp[2])
                 if self.start >= self.end:
@@ -729,7 +735,7 @@ cdef class EnclosureDevice(object):
                             self.clear_objs()
                             raise OSError(-1, "Return buffer is full.")
                         self.clear_objs()
-                        raise OSError(-1, bytes(self.r_buff, encoding='ascii').decode())
+                        raise OSError(-1, self.decode_response(self.r_buff))
                     self.start += snprintf(self.start, self.end - self.start, "      text: %.*s\n", bp[3], text_bp)
                     if self.start >= self.end:
                         self.clear_objs()
@@ -739,7 +745,7 @@ cdef class EnclosureDevice(object):
 
             self.clear_objs()
             with gil:
-                return bytes(self.r_buff, encoding='ascii').decode()
+                return self.decode_response(self.r_buff)
 
     def get_enclosure_status(self):
         cdef int len = -1
@@ -760,11 +766,11 @@ cdef class EnclosureDevice(object):
             self.clear_r_buff()
             if self.sg_inquiry() != 0:
                 self.clear_objs()
-                raise OSError(-1, bytes(self.r_buff, encoding='ascii').decode())
+                raise OSError(-1, self.decode_response(self.r_buff))
             num_ths = self.build_tdhs(&ref_gen, &info)
             if num_ths < 0:
                 self.clear_objs()
-                raise OSError(-1, bytes(self.r_buff, encoding='ascii').decode())
+                raise OSError(-1, self.decode_response(self.r_buff))
             if 1 == self.desc_hdrs_count and info.have_info:
                 self.start += snprintf(self.start, self.end - self.start, "  Primary enclosure logical identifier (hex): ")
                 if self.start >= self.end:
@@ -782,7 +788,7 @@ cdef class EnclosureDevice(object):
 
             self.clear_ptvp()
             if self.get_diagnostic_page(self.ENC_STATUS_DPC, self.rsp_buff, &len) != 0:
-                raise OSError(-1, bytes(self.r_buff, encoding='ascii').decode())
+                raise OSError(-1, self.decode_response(self.r_buff))
             self.start += snprintf(self.start, self.end - self.start, "Enclosure Status diagnostic page:\n")
             if self.start >= self.end:
                 self.clear_objs()
@@ -793,7 +799,7 @@ cdef class EnclosureDevice(object):
                     self.clear_objs()
                     raise OSError(-1, "Return buffer is full.")
                 self.clear_objs()
-                raise OSError(-1, bytes(self.r_buff, encoding='ascii').decode())
+                raise OSError(-1, self.decode_response(self.r_buff))
 
             invop = (self.rsp_buff[1] & 0x10) != 0
             infob = (self.rsp_buff[1] & 0x8) != 0
@@ -810,7 +816,7 @@ cdef class EnclosureDevice(object):
                     self.clear_objs()
                     raise OSError(-1, "Return buffer is full.")
                 self.clear_objs()
-                raise OSError(-1, bytes(self.r_buff, encoding='ascii').decode())
+                raise OSError(-1, self.decode_response(self.r_buff))
 
             last_bp = self.rsp_buff + len - 1
             gen = libsgutils.sg_get_unaligned_be32(self.rsp_buff + 4)
@@ -824,7 +830,7 @@ cdef class EnclosureDevice(object):
                     self.clear_objs()
                     raise OSError(-1, "Return buffer is full.")
                 self.clear_objs()
-                raise OSError(-1, bytes(self.r_buff, encoding='ascii').decode())
+                raise OSError(-1, self.decode_response(self.r_buff))
 
             self.start += snprintf(self.start, self.end - self.start, "  status descriptor list\n")
             if self.start >= self.end:
@@ -839,7 +845,7 @@ cdef class EnclosureDevice(object):
                         self.clear_objs()
                         raise OSError(-1, "Return buffer is full.")
                     self.clear_objs()
-                    raise OSError(-1, bytes(self.r_buff, encoding='ascii').decode())
+                    raise OSError(-1, self.decode_response(self.r_buff))
                 self.start += snprintf(self.start, self.end - self.start, "    Element type: %s, subenclosure id: %d [ti=%d]\n", self.etype_str(tp.etype, el_buff, sizeof(el_buff)), tp.se_id, k)
                 if self.start >= self.end:
                     self.clear_objs()
@@ -867,7 +873,7 @@ cdef class EnclosureDevice(object):
 
             self.clear_objs()
             with gil:
-                return bytes(self.r_buff, encoding='ascii').decode()
+                return self.decode_response(self.r_buff)
 
     def status(self):
         cdef int len = -1
@@ -900,9 +906,9 @@ cdef class EnclosureDevice(object):
             self.clear_r_buff()
             if self.sg_inquiry() != 0:
                 self.clear_objs()
-                raise OSError(-1, bytes(self.r_buff, encoding='ascii').decode())
+                raise OSError(-1, self.decode_response(self.r_buff))
             if self.get_diagnostic_page(self.CONFIGURATION_DPC, self.rsp_buff, &len) != 0:
-                raise OSError(-1, bytes(self.r_buff, encoding='ascii').decode())
+                raise OSError(-1, self.decode_response(self.r_buff))
             if len < 4:
                 self.clear_objs()
                 raise OSError(-1, "SES Confgiruation: Response too short.")
@@ -925,7 +931,7 @@ cdef class EnclosureDevice(object):
             num_ths = self.build_tdhs(&ref_gen, &info)
             if num_ths < 0:
                 self.clear_objs()
-                raise OSError(-1, bytes(self.r_buff, encoding='ascii').decode())
+                raise OSError(-1, self.decode_response(self.r_buff))
             num_dsc = 0
             for i in range(num_ths):
                 num_dsc += (1 + self.desc_hdrs[i].num_elements)
@@ -934,7 +940,7 @@ cdef class EnclosureDevice(object):
             self.clear_ptvp()
             self.clear_r_buff()
             if self.get_diagnostic_page(self.ENC_STATUS_DPC, self.rsp_buff, &len) != 0:
-                raise OSError(-1, bytes(self.r_buff, encoding='ascii').decode())
+                raise OSError(-1, self.decode_response(self.r_buff))
             if len < 4:
                 self.clear_objs()
                 raise OSError(-1, "Enclosure Status: response too short.")
@@ -966,7 +972,7 @@ cdef class EnclosureDevice(object):
             self.clear_ptvp()
             self.clear_r_buff()
             if self.get_diagnostic_page(self.ELEM_DESC_DPC, self.rsp_buff, &len) != 0:
-                raise OSError(-1, bytes(self.r_buff, encoding='ascii').decode())
+                raise OSError(-1, self.decode_response(self.r_buff))
             if len < 8:
                 self.clear_objs()
                 raise OSError(-1, "Element Descriptor: response too short.")
@@ -1003,8 +1009,8 @@ cdef class EnclosureDevice(object):
                 tp += 1
 
             with gil:
-                enclosure["id"] = bytes(id_buff, encoding='ascii').decode()
-                enclosure["name"] = " ".join(bytes(name_buff, encoding='ascii').decode().split())
+                enclosure["id"] = self.decode_response(id_buff)
+                enclosure["name"] = " ".join(self.decode_response(name_buff).split())
                 if not invop and not infob and not noncrit and not crit and not unrecov:
                     enclosure["status"].add("OK")
                 else:
@@ -1021,8 +1027,8 @@ cdef class EnclosureDevice(object):
                 elements = {}
                 for i in range(num_dsc):
                     type = tc_buff[i]
-                    dsc = bytes(desc_buff[i], encoding='ascii').decode()
-                    stts = [int(x, 16) for x in bytes(stat_buff[i], encoding='ascii').decode().split()]
+                    dsc = self.decode_response(desc_buff[i])
+                    stts = [int(x, 16) for x in self.decode_response(stat_buff[i]).split()]
                     elements[i] = { "type": type, "descriptor": dsc, "status": stts }
                 enclosure["elements"] = elements
             self.clear_objs()
@@ -1076,10 +1082,10 @@ cdef class EnclosureDevice(object):
             self.clear_ptvp()
             if num_ths < 0:
                 self.clear_objs()
-                raise OSError(-1, bytes(self.r_buff, encoding='ascii').decode())
+                raise OSError(-1, self.decode_response(self.r_buff))
 
             if self.get_diagnostic_page(self.ENC_STATUS_DPC, self.rsp_buff, &len) != 0:
-                raise OSError(-1, bytes(self.r_buff, encoding='ascii').decode())
+                raise OSError(-1, self.decode_response(self.r_buff))
             self.clear_ptvp()
 
             if len < 8:
