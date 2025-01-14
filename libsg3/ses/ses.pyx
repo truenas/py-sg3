@@ -329,11 +329,9 @@ cdef class EnclosureDevice(object):
         }
         return element_dict[index]
 
-    def decode_response(self, buff):
-        try:
-            return bytes(buff, encoding='ascii').decode()
-        except Exception:
-            return ""
+    cdef str decode_response(self, char * buff):
+        cdef bytes py_bytes = buff
+        return py_bytes.decode(errors='replace')
 
     cdef int get_diagnostic_page(self, int page_code, unsigned char * buff, int * rsp_len) nogil:
         cdef int ret = -1
